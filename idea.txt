@@ -1,0 +1,33 @@
+state_local = {
+    current_pos_in_current_maze
+    discovery
+    delta_score
+    score
+    current_maze_idx
+} - update every single movement
+
+state_global = {
+    gem_pos = {maze_idx: []}
+    next_maze_pos = []
+    prev_maze_pos = []
+} - update every event (collect gem, next/prev maze)
+
+Soft-Actor Critic
+
+determined by global state - each element in gloabl state is a goal
+priority is computed by quality network (Q*)
+priority_todo_queue = [collect gem1 from maze 0, move to maze1, collect gem2 from maze 0] 
+
+example:
+dequeue -> Q' -> move to next maze 
+update replay buffer -> update Q'
+completed -> discover more gems -> add more task to queue
+
+STOP:
+converge -> |priority_todo_queue| constant -> for all Q* in priority_todo_queue unchange
+
+Q' is the quality network to evaluate the reward of task (collecting gem based on state and traj reaching it)
+
+we need another quality network Q to evaluate the entire traj that player proceed (this is the one used to update policy)
+
+BIG-Q -> evaluate entire traj per epoch/training
