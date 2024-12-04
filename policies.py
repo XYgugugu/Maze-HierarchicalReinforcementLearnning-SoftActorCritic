@@ -18,10 +18,9 @@ class HighLevelPolicy(nn.Module):
         x = torch.relu(self.fc2(x))
         action = torch.softmax(self.fc3(x), dim=-1)
         return action
-"""
 
 # Low-Level Policy: Handles primitive actions to achieve subgoals
-low_level_policy_code = """
+
 class LowLevelPolicy(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(LowLevelPolicy, self).__init__()
@@ -34,10 +33,10 @@ class LowLevelPolicy(nn.Module):
         x = torch.relu(self.fc2(x))
         action = torch.tanh(self.fc3(x))  # Continuous action space
         return action
-"""
+
 
 # Training Loop: Update policies and replay buffers
-training_code = """
+
 class Trainer:
     def __init__(self, high_policy, low_policy, high_replay_buffer, low_replay_buffer):
         self.high_policy = high_policy
@@ -46,32 +45,78 @@ class Trainer:
         self.low_replay_buffer = low_replay_buffer
 
     def train_high_level(self, batch_size):
-        # Sample a batch and update high-level policy
-        pass
+        if self.high_replay_buffer.size < batch_size:
+            return
+        states, subgoals, rewards, next_states, dones = self.high_replay_buffer.sample(batch_size)
+        
+        # Convert to tensors
+        states = torch.tensor(states, dtype=torch.float32)
+        subgoals = torch.tensor(subgoals, dtype=torch.float32)
+        rewards = torch.tensor(rewards, dtype=torch.float32).squeeze()
+        next_states = torch.tensor(next_states, dtype=torch.float32)
+        dones = torch.tensor(dones, dtype=torch.float32).squeeze()
+
+        # Predict subgoals and compute loss
+        predicted_subgoals = self.high_policy(states)
+        loss = self.criterion(predicted_subgoals, subgoals)
+
+        # Update high-level policy
+        self.high_optimizer.zero_grad()
+        loss.backward()
+        self.high_optimizer.step()
 
     def train_low_level(self, batch_size):
-        # Sample a batch and update low-level policy
-        pass
+        if self.low_replay_buffer.size < batch_size:
+            return
+        states, actions, rewards, next_states, dones = self.low_replay_buffer.sample(batch_size)
+        
+        # Convert to tensors
+        states = torch.tensor(states, dtype=torch.float32)
+        actions = torch.tensor(actions, dtype=torch.float32)
+        rewards = torch.tensor(rewards, dtype=torch.float32).squeeze()
+        next_states = torch.tensor(next_states, dtype=torch.float32)
+        dones = torch.tensor(dones, dtype=torch.float32).squeeze()
 
-    def train(self, episodes):
+        # Predict actions and compute loss
+        predicted_actions = self.low_policy(states)
+        loss = self.criterion(predicted_actions, actions)
+
+        # Update low-level policy
+        self.low_optimizer.zero_grad()
+        loss.backward()
+        self.low_optimizer.step()
+
+    def train(self, episodes,batch_size):
         for episode in range(episodes):
-            # Implement full training logic: generate subgoals and execute
-            pass
+            self.train_high_level(batch_size)
+            self.train_low_level(batch_size)
 
+class ReplayBuffer:
+    def __init__(self, capacity, state_dim, action_dim):
+        self.capacity = capacity
+        self.state_buffer = np.zeros((capacity, state_dim))
+        self.action_buffer = np.zeros((capacity, action_dim))
+        self.reward_buffer = np.zeros((capacity, 1))
+        self.next_state_buffer = np.zeros((capacity, state_dim))
+        self.done_buffer = np.zeros((capacity, 1))
+        self.ptr = 0
+        self.size = 0
 
-# Save to main directory
-high_level_file = os.path.join(main_folder_path, "high_level_policy.py")
-low_level_file = os.path.join(main_folder_path, "low_level_policy.py")
-training_file = os.path.join(main_folder_path, "trainer.py")
+    def add(self, state, action, reward, next_state, done):
+        self.state_buffer[self.ptr] = state
+        self.action_buffer[self.ptr] = action
+        self.reward_buffer[self.ptr] = reward
+        self.next_state_buffer[self.ptr] = next_state
+        self.done_buffer[self.ptr] = done
+        self.ptr = (self.ptr + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
 
-with open(high_level_file, "w") as f:
-    f.write(high_level_policy_code)
-
-with open(low_level_file, "w") as f:
-    f.write(low_level_policy_code)
-
-with open(training_file, "w") as f:
-    f.write(training_code)
-
-# Return success message
-"Hierarchical reinforcement learning (HRL) files created successfully."
+    def sample(self, batch_size):
+        indices = np.random.choice(self.size, batch_size, replace=False)
+        return (
+            self.state_buffer[indices],
+            self.action_buffer[indices],
+            self.reward_buffer[indices],
+            self.next_state_buffer[indices],
+            self.done_buffer[indices],
+        )
