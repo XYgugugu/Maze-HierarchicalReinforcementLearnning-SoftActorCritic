@@ -8,9 +8,10 @@ class Player:
         
         self.score = 0
         self.delta_score = 0
-        
+        self.state_dim = len(start_pos)
         self.score_system = ScoreSystem()
         self.score_system.record_pos(start_pos)
+        self.action_dim = 4
 
     def move(self, direction, maze):
         from maze import Gem
