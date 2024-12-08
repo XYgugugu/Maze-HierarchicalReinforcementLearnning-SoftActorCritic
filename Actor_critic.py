@@ -51,11 +51,12 @@ class Critic(nn.Module):
 # Soft Actor-Critic
 class SAC:
     def __init__(self, state_dim, action_dim, max_action, gamma=0.99, tau=0.005, alpha=0.2, lr=3e-4):
-        self.actor = Actor(state_dim, action_dim, max_action).to("cuda")
-        self.critic_1 = Critic(state_dim, action_dim).to("cuda")
-        self.critic_2 = Critic(state_dim, action_dim).to("cuda")
-        self.target_critic_1 = Critic(state_dim, action_dim).to("cuda")
-        self.target_critic_2 = Critic(state_dim, action_dim).to("cuda")
+        self.deivce = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.actor = Actor(state_dim, action_dim, max_action).to(self.deivce)
+        self.critic_1 = Critic(state_dim, action_dim).to(self.deivce)
+        self.critic_2 = Critic(state_dim, action_dim).to(self.deivce)
+        self.target_critic_1 = Critic(state_dim, action_dim).to(self.deivce)
+        self.target_critic_2 = Critic(state_dim, action_dim).to(self.deivce)
 
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr)
         self.critic_1_optimizer = optim.Adam(self.critic_1.parameters(), lr=lr)
@@ -74,11 +75,11 @@ class SAC:
     def update(self, replay_buffer, batch_size):
         # Sample from replay buffer
         states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
-        states = torch.tensor(states, dtype=torch.float32).to("cuda")
-        actions = torch.tensor(actions, dtype=torch.float32).to("cuda")
-        rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1).to("cuda")
-        next_states = torch.tensor(next_states, dtype=torch.float32).to("cuda")
-        dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1).to("cuda")
+        states = torch.tensor(states, dtype=torch.float32).to(self.deivce)
+        actions = torch.tensor(actions, dtype=torch.float32).to(self.deivce)
+        rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1).to(self.deivce)
+        next_states = torch.tensor(next_states, dtype=torch.float32).to(self.deivce)
+        dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1).to(self.deivce)
 
         # Update Critic
         with torch.no_grad():
