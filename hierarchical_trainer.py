@@ -1,9 +1,9 @@
 # Full training loop implementation and hierarchical structure integration
 import numpy as np
 import torch
-from high_level_policy import HighLevelPolicy
-from low_level_policy import LowLevelPolicy
-from replay_buffer import ReplayBuffer
+from policies import HighLevelPolicy
+from policies import LowLevelPolicy
+from policies import ReplayBuffer
 
 class HierarchicalTrainer:
     def __init__(self, state_dim, action_dim, subgoal_dim, buffer_capacity, high_lr, low_lr):

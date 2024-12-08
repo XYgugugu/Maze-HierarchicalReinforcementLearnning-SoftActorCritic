@@ -5,7 +5,7 @@ import numpy as np
 
 # Actor Network
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, max_action):
+    def __init__(self, state_dim, action_dim):
         super(Actor, self).__init__()
         self.layer1 = nn.Sequential(
             nn.Linear(state_dim, 256),
@@ -13,24 +13,18 @@ class Actor(nn.Module):
             nn.Linear(256, 256),
             nn.ReLU()
         )
-        self.mean = nn.Linear(256, action_dim)
-        self.log_std = nn.Linear(256, action_dim)
-        self.max_action = max_action
+        self.action_logits = nn.Linear(256, action_dim)
 
     def forward(self, state):
         x = self.layer1(state)
-        mean = self.mean(x)
-        log_std = self.log_std(x).clamp(-20, 2)  # Bound the log_std for numerical stability
-        std = log_std.exp()
-        return mean, std
+        logits = self.action_logits(x)  # Logits for the actions
+        return logits
 
     def sample_action(self, state):
-        mean, std = self.forward(state)
-        dist = torch.distributions.Normal(mean, std)
-        action = dist.rsample()  # Reparameterization trick
-        action = torch.tanh(action) * self.max_action  # Rescale action
-        log_prob = dist.log_prob(action).sum(axis=-1)
-        log_prob -= torch.log(1 - action.pow(2) + 1e-6).sum(axis=-1)  # Correction for tanh squashing
+        logits = self.forward(state)
+        dist = torch.distributions.Categorical(logits=logits)  # Categorical distribution
+        action = dist.sample()  # Sample a discrete action
+        log_prob = dist.log_prob(action)  # Log probability of the sampled action
         return action, log_prob
 
 # Critic Network
@@ -50,9 +44,9 @@ class Critic(nn.Module):
 
 # Soft Actor-Critic
 class SAC:
-    def __init__(self, state_dim, action_dim, max_action, gamma=0.99, tau=0.005, alpha=0.2, lr=3e-4):
+    def __init__(self, state_dim, action_dim, gamma=0.99, tau=0.005, alpha=0.2, lr=3e-4):
         self.deivce = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.actor = Actor(state_dim, action_dim, max_action).to(self.deivce)
+        self.actor = Actor(state_dim, action_dim).to(self.deivce)
         self.critic_1 = Critic(state_dim, action_dim).to(self.deivce)
         self.critic_2 = Critic(state_dim, action_dim).to(self.deivce)
         self.target_critic_1 = Critic(state_dim, action_dim).to(self.deivce)
@@ -65,8 +59,6 @@ class SAC:
         self.gamma = gamma
         self.tau = tau
         self.alpha = alpha
-
-        self.max_action = max_action
 
         # Copy parameters to the target networks
         self.target_critic_1.load_state_dict(self.critic_1.state_dict())
@@ -117,3 +109,4 @@ class SAC:
 
         for param, target_param in zip(self.critic_2.parameters(), self.target_critic_2.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+

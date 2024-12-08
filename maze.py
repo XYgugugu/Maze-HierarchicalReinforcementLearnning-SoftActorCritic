@@ -33,12 +33,12 @@ class Maze:
                         elif char == '3':
                             row.append(3)  # 上一层
                             prev_pos = (x, y)
-                        elif char.startswith('gem1'):
+                        elif char.startswith('gem1'): # 宝石1
                             gem_info = char.split('_')
                             gem = Gem1(int(gem_info[1]), int(gem_info[2]))
                             dict_gem[(maze_idx, x, y)] = gem
                             row.append(gem)
-                        elif char.startswith('gem2'):
+                        elif char.startswith('gem2'):  # 
                             gem_info = char.split('_')
                             gem_rewards = [int(r) for r in gem_info[1].split('-')]
                             gem_cond = [int(c) for c in gem_info[2].split('-')]

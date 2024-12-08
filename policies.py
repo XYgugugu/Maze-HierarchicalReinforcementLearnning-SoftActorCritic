@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+import os
 
 class HighLevelPolicy(nn.Module):
     def __init__(self, state_dim, action_dim):
@@ -120,3 +121,32 @@ class ReplayBuffer:
             self.next_state_buffer[indices],
             self.done_buffer[indices],
         )
+    
+    def save(self,path,name):
+        # Ensure the directory exists
+        path = path + name
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        # Save the buffers and metadata to a .npz file
+        np.savez_compressed(
+            path,
+            state_buffer=self.state_buffer,
+            action_buffer=self.action_buffer,
+            reward_buffer=self.reward_buffer,
+            next_state_buffer=self.next_state_buffer,
+            done_buffer=self.done_buffer,
+            size=min(self.size,self.capacity)
+        )
+        print(f"Replay buffer saved to:\n {path}")
+
+    def load(self, path,name):
+        data = np.load(path+name)
+        self.state_buffer = data["state_buffer"]
+        self.action_buffer = data["action_buffer"]
+        self.reward_buffer = data["reward_buffer"]
+        self.next_state_buffer = data["next_state_buffer"]
+        self.done_buffer = data["done_buffer"]
+        self.ptr = int(data["ptr"])
+        self.size = int(data["size"])
+        self.capacity = int(data["capacity"])
+        print(f"Replay buffer loaded from {path}")

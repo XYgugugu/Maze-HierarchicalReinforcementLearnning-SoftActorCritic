@@ -92,8 +92,8 @@ class Player:
                 self.score_system.reset_path_tracker()
                 self.tp(maze.start_pos, maze.current_maze_index) # 重置玩家位置
             else:
-                running = False
-        
+                running = False 
+          
         # 检查玩家是否拾取宝石
         isGem, gem = maze.is_gem(self.pos)
         if isGem:
