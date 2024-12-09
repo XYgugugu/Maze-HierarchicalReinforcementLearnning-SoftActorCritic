@@ -4,7 +4,7 @@ from maze import Maze
 from player import Player
 import torch
 from policies import ReplayBuffer
-
+import matplotlib.pyplot as plt
 
 pygame.init()
 
@@ -24,7 +24,7 @@ last_move_time = 0
 
 state_dim = 4
 action_dim = 4
-
+batch_size = 20
 action_mapping = {
     0: "up",
     1: "down",
@@ -32,19 +32,15 @@ action_mapping = {
     3: "right"
 }
 Save_path = "/Users/rzty/Regular/HRL/Maze-HierarchicalReinforcementLearnning-SoftActorCritic/"
-SAC_test = SAC(state_dim, action_dim, gamma=0.99, tau=0.005, alpha=0.2, lr=3e-4)
-
+SAC_test = SAC(state_dim, action_dim, gamma=0.99, tau=0.005, alpha=0.1, lr=3e-5)
+replay_buffer = ReplayBuffer(batch_size, state_dim, 1)
 
 
 def buffer_generator(steps):
     global last_move_time
-    replay_buffer = ReplayBuffer(steps, state_dim, action_dim)
-    
+    # player = Player(maze.start_pos) 
     for i in range(steps):
             # 事件处理
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
             # 获取当前时间
             pygame.time.delay(20) 
             current_time = pygame.time.get_ticks()
@@ -92,19 +88,64 @@ def buffer_generator(steps):
                 x, y = player.pos
                 maze.grid[x][y] = 0
             new_state = [player.pos[0],player.pos[1],len(player.discovery),maze.current_maze_index]
-            replay_buffer.add(initial_state,action,player.delta_score,new_state,None)
+            if i!=steps-1:
+                replay_buffer.add(initial_state,action,player.delta_score,new_state,0)
+            else:
+                replay_buffer.add(initial_state,action,player.delta_score,new_state,1)
             # 更新屏幕
             pygame.display.flip()
     print(f"Game over with score: {player.score}")
     name = "buffer1"
-    replay_buffer.save(Save_path,name)
-    pygame.quit()
+    # replay_buffer.save(Save_path,name)
+    
 
-
+# def train_sac(batch_size):
+   
 
 if __name__=="__main__":
-    buffer_generator(100)
+    critic1_loss = []
+    critic2_loss = []
+    actor_loss = []
+    max_iteration = 100
+    _,axes = plt.subplots(3,1)
+    for i in range(max_iteration):
+        buffer_generator(batch_size)
+        critic1,critic2,actor_l =  SAC_test.update(replay_buffer,batch_size)
+        critic1_loss.append(critic1)
+        critic2_loss.append(critic2)
+        actor_loss.append(actor_l)
 
+        
+        axes[0].cla()
+        axes[0].plot(range(len(critic1_loss)), critic1_loss, label='Critic 1 Loss', color='blue')
+        axes[0].legend()
+
+        axes[1].cla()
+        axes[1].plot(range(len(critic2_loss)), critic2_loss, label='Critic 2 Loss', color='orange')
+        axes[1].legend()
+
+        axes[2].cla()
+        axes[2].plot(range(len(actor_loss)), actor_loss, label='Actor Loss', color='green')
+        axes[2].legend()
+
+        # 设置标题和轴标签（重置时需要重新添加）
+        axes[0].set_title("Critic 1 Loss")
+        axes[0].set_xlabel("Iterations")
+        axes[0].set_ylabel("Loss")
+
+        axes[1].set_title("Critic 2 Loss")
+        axes[1].set_xlabel("Iterations")
+        axes[1].set_ylabel("Loss")
+
+        axes[2].set_title("Actor Loss")
+        axes[2].set_xlabel("Iterations")
+        axes[2].set_ylabel("Loss")
+
+    # 更新绘图
+        pygame.display.flip()
+        plt.pause(0.1) 
+    pygame.quit()
+    plt.show()
 
 
 

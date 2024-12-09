@@ -47,10 +47,10 @@ class SAC:
     def __init__(self, state_dim, action_dim, gamma=0.99, tau=0.005, alpha=0.2, lr=3e-4):
         self.deivce = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.actor = Actor(state_dim, action_dim).to(self.deivce)
-        self.critic_1 = Critic(state_dim, action_dim).to(self.deivce)
-        self.critic_2 = Critic(state_dim, action_dim).to(self.deivce)
-        self.target_critic_1 = Critic(state_dim, action_dim).to(self.deivce)
-        self.target_critic_2 = Critic(state_dim, action_dim).to(self.deivce)
+        self.critic_1 = Critic(state_dim, 1).to(self.deivce)
+        self.critic_2 = Critic(state_dim, 1).to(self.deivce)
+        self.target_critic_1 = Critic(state_dim, 1).to(self.deivce)
+        self.target_critic_2 = Critic(state_dim, 1).to(self.deivce)
 
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr)
         self.critic_1_optimizer = optim.Adam(self.critic_1.parameters(), lr=lr)
@@ -76,6 +76,7 @@ class SAC:
         # Update Critic
         with torch.no_grad():
             next_actions, next_log_probs = self.actor.sample_action(next_states)
+            next_actions = next_actions.unsqueeze(1).to(self.deivce)
             target_q1 = self.target_critic_1(next_states, next_actions)
             target_q2 = self.target_critic_2(next_states, next_actions)
             target_q = rewards + self.gamma * (1 - dones) * (torch.min(target_q1, target_q2) - self.alpha * next_log_probs)
@@ -84,7 +85,6 @@ class SAC:
         q2 = self.critic_2(states, actions)
         critic_1_loss = nn.MSELoss()(q1, target_q)
         critic_2_loss = nn.MSELoss()(q2, target_q)
-
         self.critic_1_optimizer.zero_grad()
         critic_1_loss.backward()
         self.critic_1_optimizer.step()
@@ -95,10 +95,11 @@ class SAC:
 
         # Update Actor
         actions, log_probs = self.actor.sample_action(states)
+        actions = actions.unsqueeze(1).to(self.deivce)
         q1 = self.critic_1(states, actions)
         q2 = self.critic_2(states, actions)
-        actor_loss = (self.alpha * log_probs - torch.min(q1, q2)).mean()
-
+        actor_loss = -(-self.alpha * log_probs ).mean()
+        # print(self.alpha * log_probs)
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
@@ -109,4 +110,5 @@ class SAC:
 
         for param, target_param in zip(self.critic_2.parameters(), self.target_critic_2.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-
+        
+        return critic_1_loss.item(),critic_2_loss.item(),actor_loss.item()
