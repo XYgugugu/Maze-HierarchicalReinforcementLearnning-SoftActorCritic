@@ -1,12 +1,12 @@
 state_local = {
-    current_pos_in_current_maze
+    current_pos_in_current_maze*2
     discovery
-    delta_score
-    score
     current_maze_idx
 } - update every single movement
 
 state_global = {
+    delta_score
+    score
     gem_pos = {maze_idx: []}
     next_maze_pos = []
     prev_maze_pos = []
@@ -31,3 +31,9 @@ Q' is the quality network to evaluate the reward of task (collecting gem based o
 we need another quality network Q to evaluate the entire traj that player proceed (this is the one used to update policy)
 
 BIG-Q -> evaluate entire traj per epoch/training
+
+
+problem:
+    1. subgoal
+    2. remove score from state_local 
+

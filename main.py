@@ -87,5 +87,5 @@ while running:
 
     # 更新屏幕
     pygame.display.flip()
-print(f"Game over with score: {player.score + 500}")
+print(f"Game over with score: {player.score}")
 pygame.quit()
