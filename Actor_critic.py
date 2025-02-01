@@ -45,12 +45,12 @@ class Critic(nn.Module):
 # Soft Actor-Critic
 class SAC:
     def __init__(self, state_dim, action_dim, gamma=0.99, tau=0.005, alpha=0.2, lr=3e-4):
-        self.deivce = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.actor = Actor(state_dim, action_dim).to(self.deivce)
-        self.critic_1 = Critic(state_dim, 1).to(self.deivce)
-        self.critic_2 = Critic(state_dim, 1).to(self.deivce)
-        self.target_critic_1 = Critic(state_dim, 1).to(self.deivce)
-        self.target_critic_2 = Critic(state_dim, 1).to(self.deivce)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.actor = Actor(state_dim, action_dim).to(self.device)
+        self.critic_1 = Critic(state_dim, 1).to(self.device)
+        self.critic_2 = Critic(state_dim, 1).to(self.device)
+        self.target_critic_1 = Critic(state_dim, 1).to(self.device)
+        self.target_critic_2 = Critic(state_dim, 1).to(self.device)
 
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr)
         self.critic_1_optimizer = optim.Adam(self.critic_1.parameters(), lr=lr)
@@ -67,16 +67,16 @@ class SAC:
     def update(self, replay_buffer, batch_size):
         # Sample from replay buffer
         states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
-        states = torch.tensor(states, dtype=torch.float32).to(self.deivce)
-        actions = torch.tensor(actions, dtype=torch.float32).to(self.deivce)
-        rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1).to(self.deivce)
-        next_states = torch.tensor(next_states, dtype=torch.float32).to(self.deivce)
-        dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1).to(self.deivce)
+        states = torch.tensor(states, dtype=torch.float32).to(self.device)
+        actions = torch.tensor(actions, dtype=torch.float32).to(self.device)
+        rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1).to(self.device)
+        next_states = torch.tensor(next_states, dtype=torch.float32).to(self.device)
+        dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1).to(self.device)
 
         # Update Critic
         with torch.no_grad():
             next_actions, next_log_probs = self.actor.sample_action(next_states)
-            next_actions = next_actions.unsqueeze(1).to(self.deivce)
+            next_actions = next_actions.unsqueeze(1).to(self.device)
             target_q1 = self.target_critic_1(next_states, next_actions)
             target_q2 = self.target_critic_2(next_states, next_actions)
             target_q = rewards + self.gamma * (1 - dones) * (torch.min(target_q1, target_q2) - self.alpha * next_log_probs)
@@ -95,11 +95,11 @@ class SAC:
 
         # Update Actor
         actions, log_probs = self.actor.sample_action(states)
-        actions = actions.unsqueeze(1).to(self.deivce)
-        q1 = self.critic_1(states, actions)
-        q2 = self.critic_2(states, actions)
-        actor_loss = -(-self.alpha * log_probs ).mean()
-        # print(self.alpha * log_probs)
+        actions = actions.unsqueeze(1).to(self.device)
+        q1 = self.critic_1(states, actions).unsqueeze(1).to(self.device)
+        q2 = self.critic_2(states, actions).unsqueeze(1).to(self.device)
+        actor_loss = (self.alpha * log_probs - torch.min(q1,q2)).mean()
+        
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
