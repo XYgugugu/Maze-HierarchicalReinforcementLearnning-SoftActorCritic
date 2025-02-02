@@ -18,11 +18,11 @@ class Actor(nn.Module):
     def forward(self, state):
         x = self.layer1(state)
         logits = self.action_logits(x)  # Logits for the actions
-        return nn.functional.softmax(logits, dim=1)
+        return logits
 
     def sample_action(self, state):
-        action_probs = self.forward(state)
-        dist = torch.distributions.Categorical(logits=action_probs)  # Categorical distribution
+        logits = self.forward(state)
+        dist = torch.distributions.Categorical(logits=logits)  # Categorical distribution
         action = dist.sample()  # Sample a discrete action
         log_prob = dist.log_prob(action)  # Log probability of the sampled action
         return action, log_prob
@@ -31,6 +31,8 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
+        self.state_dim = state_dim
+        self.action_dim = action_dim
         self.layers = nn.Sequential(
             nn.Linear(state_dim + action_dim, 256),
             nn.ReLU(),
@@ -39,7 +41,12 @@ class Critic(nn.Module):
             nn.Linear(256, 1)
         )
     def forward(self, state, action):
-        x = torch.cat([state, action], dim=1)
+        # this encoding is for discrete action space ONLY
+        if action.dim() > 1 and action.size(-1) == 1:
+            action = action.squeeze(-1)
+        action_one_hot = nn.functional.one_hot(action.to(torch.int64), num_classes=self.action_dim).float()
+        
+        x = torch.cat([state, action_one_hot], dim=1)
         return self.layers(x)
 
 # Soft Actor-Critic
@@ -47,10 +54,10 @@ class SAC:
     def __init__(self, state_dim, action_dim, gamma=0.99, tau=0.005, alpha=0.2, lr=3e-4):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.actor = Actor(state_dim, action_dim).to(self.device)
-        self.critic_1 = Critic(state_dim, 1).to(self.device)
-        self.critic_2 = Critic(state_dim, 1).to(self.device)
-        self.target_critic_1 = Critic(state_dim, 1).to(self.device)
-        self.target_critic_2 = Critic(state_dim, 1).to(self.device)
+        self.critic_1 = Critic(state_dim, action_dim).to(self.device)
+        self.critic_2 = Critic(state_dim, action_dim).to(self.device)
+        self.target_critic_1 = Critic(state_dim, action_dim).to(self.device)
+        self.target_critic_2 = Critic(state_dim, action_dim).to(self.device)
 
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr)
         self.critic_1_optimizer = optim.Adam(self.critic_1.parameters(), lr=lr)
