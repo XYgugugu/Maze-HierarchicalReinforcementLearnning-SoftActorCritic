@@ -79,7 +79,7 @@ class SAC:
             next_actions = next_actions.unsqueeze(1).to(self.device)
             target_q1 = self.target_critic_1(next_states, next_actions)
             target_q2 = self.target_critic_2(next_states, next_actions)
-            target_q = rewards + self.gamma * (1 - dones) * (torch.min(target_q1, target_q2) - self.alpha * next_log_probs)
+            target_q = rewards + self.gamma * (1 - dones) * (torch.min(target_q1, target_q2).detach() - self.alpha * next_log_probs)
 
         q1 = self.critic_1(states, actions)
         q2 = self.critic_2(states, actions)
@@ -98,7 +98,7 @@ class SAC:
         actions = actions.unsqueeze(1).to(self.device)
         q1 = self.critic_1(states, actions).unsqueeze(1).to(self.device)
         q2 = self.critic_2(states, actions).unsqueeze(1).to(self.device)
-        actor_loss = (self.alpha * log_probs - torch.min(q1,q2)).mean()
+        actor_loss = (self.alpha * log_probs - torch.min(q1,q2).detach()).mean()
         
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
