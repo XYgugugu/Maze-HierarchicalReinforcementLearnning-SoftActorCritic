@@ -77,6 +77,7 @@ class SAC:
         with torch.no_grad():
             next_actions, next_log_probs = self.actor.sample_action(next_states)
             next_actions = next_actions.unsqueeze(1).to(self.device)
+            next_log_probs = next_log_probs.detach()
             target_q1 = self.target_critic_1(next_states, next_actions)
             target_q2 = self.target_critic_2(next_states, next_actions)
             target_q = rewards + self.gamma * (1 - dones) * (torch.min(target_q1, target_q2).detach() - self.alpha * next_log_probs)
