@@ -5,6 +5,7 @@ class GameEnv():
     
     def __init__(self, maze_file = './data/mazes.txt') -> None:
         self.maze = Maze(maze_file)
+        self.discovered_maze_count = 1
         self.player = Player(self.maze.start_pos)
         self.game_over = False
     
@@ -45,6 +46,7 @@ class GameEnv():
             if self.maze.switch_to_next_maze():
                 self.player.score_system.reset_path_tracker()
                 self.player.tp(self.maze.start_pos, self.maze.current_maze_index)
+                self.discovered_maze_count = max(self.discovered_maze_count, self.maze.current_maze_index + 1)
             else:
                 self.game_over = True
     
