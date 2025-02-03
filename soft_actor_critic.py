@@ -106,7 +106,7 @@ class SAC:
         actions = actions.unsqueeze(1).to(self.device)
         q1 = self.critic_1(states, actions).unsqueeze(1).to(self.device)
         q2 = self.critic_2(states, actions).unsqueeze(1).to(self.device)
-        actor_loss = (self.alpha * log_probs - torch.min(q1,q2).detach()).mean()
+        actor_loss = (self.alpha * log_probs - torch.min(q1,q2)).mean()
         
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
