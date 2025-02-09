@@ -1,4 +1,4 @@
-from Actor_critic import SAC
+from soft_actor_critic import SAC
 import pygame
 from maze import Maze
 from player import Player

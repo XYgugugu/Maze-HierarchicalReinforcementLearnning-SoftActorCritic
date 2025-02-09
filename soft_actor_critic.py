@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+import gym
 
 # Actor Network
 class Actor(nn.Module):
@@ -10,24 +11,33 @@ class Actor(nn.Module):
         self.layer1 = nn.Sequential(
             nn.Linear(state_dim, 256),
             nn.ReLU(),
-            nn.Linear(256, 256),
+            nn.Linear(256, 128),
+            nn.LayerNorm(),
             nn.ReLU()
         )
-        self.action_logits = nn.Linear(256, action_dim)
+        self.action_logits = nn.Linear(128, action_dim)
 
     def forward(self, state):
         x = self.layer1(state)
-        logits = self.action_logits(x)  # Logits for the actions
+        logits = self.action_logits(x)
         return logits
 
-    def sample_action(self, state):
+    def sample_action(self, state, gradient=True):
         logits = self.forward(state)
-        dist = torch.distributions.Categorical(logits=logits)  # Categorical distribution
-        action = dist.sample()  # Sample a discrete action
-        log_prob = dist.log_prob(action)  # Log probability of the sampled action
+        if gradient:
+            # Use Gumbel-Softmax for differentiable sampling
+            action_probs = torch.nn.functional.gumbel_softmax(logits, tau=0.5, hard=True)
+            action = action_probs.argmax(dim=-1)
+            # Correct log_prob using original logits
+            log_prob = torch.log_softmax(logits, dim=-1).gather(1, action.unsqueeze(-1)).squeeze(-1)
+        else:
+            # Standard sampling without gradients
+            dist = torch.distributions.Categorical(logits=logits)
+            action = dist.sample()
+            log_prob = dist.log_prob(action)
         return action, log_prob
 
-# Critic Network
+# Critic Network (unchanged)
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
@@ -40,12 +50,11 @@ class Critic(nn.Module):
             nn.ReLU(),
             nn.Linear(256, 1)
         )
+    
     def forward(self, state, action):
-        # this encoding is for discrete action space ONLY
         if action.dim() > 1 and action.size(-1) == 1:
             action = action.squeeze(-1)
         action_one_hot = nn.functional.one_hot(action.to(torch.int64), num_classes=self.action_dim).float()
-        
         x = torch.cat([state, action_one_hot], dim=1)
         return self.layers(x)
 
@@ -67,56 +76,58 @@ class SAC:
         self.tau = tau
         self.alpha = alpha
 
-        # Copy parameters to the target networks
+        # Initialize target networks
         self.target_critic_1.load_state_dict(self.critic_1.state_dict())
         self.target_critic_2.load_state_dict(self.critic_2.state_dict())
-
+        
     def update(self, replay_buffer, batch_size):
-        # Sample from replay buffer
         states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
         states = torch.tensor(states, dtype=torch.float32).to(self.device)
-        actions = torch.tensor(actions, dtype=torch.float32).unsqueeze(1).to(self.device)
+        actions = torch.tensor(actions, dtype=torch.long).unsqueeze(1).to(self.device)
         rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1).to(self.device)
         next_states = torch.tensor(next_states, dtype=torch.float32).to(self.device)
         dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1).to(self.device)
 
-        # Update Critic
+        # Critic update
         with torch.no_grad():
-            next_actions, next_log_probs = self.actor.sample_action(next_states)
-            next_actions = next_actions.unsqueeze(1).to(self.device)
-            next_log_probs = next_log_probs.detach()
+            # Use gradient=False for target action sampling
+            next_actions, next_log_probs = self.actor.sample_action(next_states, gradient=False)
+            next_actions = next_actions.unsqueeze(1)
             target_q1 = self.target_critic_1(next_states, next_actions)
             target_q2 = self.target_critic_2(next_states, next_actions)
-            target_q = rewards + self.gamma * (1 - dones) * (torch.min(target_q1, target_q2).detach() - self.alpha * next_log_probs)
+            target_q = rewards + self.gamma * (1 - dones) * (torch.min(target_q1, target_q2) - self.alpha * next_log_probs.unsqueeze(1))
 
-        q1 = self.critic_1(states, actions)
-        q2 = self.critic_2(states, actions)
-        critic_1_loss = nn.MSELoss()(q1, target_q)
-        critic_2_loss = nn.MSELoss()(q2, target_q)
+        current_q1 = self.critic_1(states, actions)
+        current_q2 = self.critic_2(states, actions)
+        critic_1_loss = nn.MSELoss()(current_q1, target_q)
+        critic_2_loss = nn.MSELoss()(current_q2, target_q)
+
         self.critic_1_optimizer.zero_grad()
         critic_1_loss.backward()
         self.critic_1_optimizer.step()
+        torch.nn.utils.clip_grad_norm_(self.critic_1.parameters(), 0.5)
 
         self.critic_2_optimizer.zero_grad()
         critic_2_loss.backward()
         self.critic_2_optimizer.step()
+        torch.nn.utils.clip_grad_norm_(self.critic_2.parameters(), 0.5)
 
-        # Update Actor
-        actions, log_probs = self.actor.sample_action(states)
-        actions = actions.unsqueeze(1).to(self.device)
-        q1 = self.critic_1(states, actions).unsqueeze(1).to(self.device)
-        q2 = self.critic_2(states, actions).unsqueeze(1).to(self.device)
-        actor_loss = (self.alpha * log_probs - torch.min(q1,q2)).mean()
-        
+        # Actor update
+        actions_new, log_probs = self.actor.sample_action(states)
+        actions_new = actions_new.unsqueeze(1)
+        q1_new = self.critic_1(states, actions_new)
+        q2_new = self.critic_2(states, actions_new)
+        actor_loss = (self.alpha * log_probs.unsqueeze(1) - torch.min(q1_new, q2_new)).mean()
+
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
 
-        # Update Target Critics
-        for param, target_param in zip(self.critic_1.parameters(), self.target_critic_1.parameters()):
-            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-
-        for param, target_param in zip(self.critic_2.parameters(), self.target_critic_2.parameters()):
+        # Update target networks
+        for target_param, param in zip(self.target_critic_1.parameters(), self.critic_1.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
         
-        return critic_1_loss.item(),critic_2_loss.item(),actor_loss.item()
+        for target_param, param in zip(self.target_critic_2.parameters(), self.critic_2.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+        
+        return critic_1_loss.item(), critic_2_loss.item(), actor_loss.item()
